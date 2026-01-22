@@ -8768,9 +8768,10 @@ void MessagesManager::delete_dialog_history(DialogId dialog_id, bool remove_from
   }
 
   set_dialog_max_unavailable_message_id(dialog_id, last_new_message_id, false, "delete_dialog_history");
+  promise.set_value(Unit());
 
-  td_->message_query_manager_->delete_dialog_history_on_server(dialog_id, last_new_message_id, remove_from_dialog_list,
-                                                               revoke, allow_error, 0, std::move(promise));
+//  td_->message_query_manager_->delete_dialog_history_on_server(dialog_id, last_new_message_id, remove_from_dialog_list,
+//                                                               revoke, allow_error, 0, std::move(promise));
 }
 
 vector<MessageId> MessagesManager::find_dialog_messages(const Dialog *d,
