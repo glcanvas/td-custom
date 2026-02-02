@@ -8717,38 +8717,38 @@ void MessagesManager::delete_dialog_history(DialogId dialog_id, bool remove_from
 
   TRY_RESULT_PROMISE(promise, d, check_dialog_access(dialog_id, true, AccessRights::Read, "delete_dialog_history"));
 
-  if (is_dialog_sponsored(d)) {
-    auto chat_source = sponsored_dialog_source_.get_chat_source_object();
-    if (chat_source == nullptr || chat_source->get_id() != td_api::chatSourcePublicServiceAnnouncement::ID) {
-      return promise.set_error(400, "Can't delete the chat");
-    }
-    if (!remove_from_dialog_list) {
-      return promise.set_error(400, "Can't delete chat history without removing the chat");
-    }
-
-    removed_sponsored_dialog_id_ = dialog_id;
-
-    td_->promo_data_manager_->hide_promo_data(dialog_id);
-
-    promise.set_value(Unit());
-    return;
-  }
-
-  auto can_delete = can_delete_dialog(d);
-  if (revoke) {
-    if (!can_delete.for_all_users_) {
-      if (!can_delete.for_self_) {
-        return promise.set_error(400, "Chat history can't be deleted");
-      }
-
-      LOG(INFO) << "Can't delete history of " << dialog_id << " for everyone; delete it only for self";
-      revoke = false;
-    }
-  } else {
-    if (!can_delete.for_self_) {
-      return promise.set_error(400, PSLICE() << "Can't delete history of " << dialog_id << " only for self");
-    }
-  }
+//  if (is_dialog_sponsored(d)) {
+//    auto chat_source = sponsored_dialog_source_.get_chat_source_object();
+//    if (chat_source == nullptr || chat_source->get_id() != td_api::chatSourcePublicServiceAnnouncement::ID) {
+//      return promise.set_error(400, "Can't delete the chat");
+//    }
+//    if (!remove_from_dialog_list) {
+//      return promise.set_error(400, "Can't delete chat history without removing the chat");
+//    }
+//
+//    removed_sponsored_dialog_id_ = dialog_id;
+//
+//    td_->promo_data_manager_->hide_promo_data(dialog_id);
+//
+//    promise.set_value(Unit());
+//    return;
+//  }
+//
+//  auto can_delete = can_delete_dialog(d);
+//  if (revoke) {
+//    if (!can_delete.for_all_users_) {
+//      if (!can_delete.for_self_) {
+//        return promise.set_error(400, "Chat history can't be deleted");
+//      }
+//
+//      LOG(INFO) << "Can't delete history of " << dialog_id << " for everyone; delete it only for self";
+//      revoke = false;
+//    }
+//  } else {
+//    if (!can_delete.for_self_) {
+//      return promise.set_error(400, PSLICE() << "Can't delete history of " << dialog_id << " only for self");
+//    }
+//  }
 
   auto last_new_message_id = d->last_new_message_id;
   if (dialog_id.get_type() != DialogType::SecretChat && last_new_message_id == MessageId()) {
