@@ -6,6 +6,7 @@
 //
 #include "td/db/binlog/Binlog.h"
 
+#include "td/db/TdMetrics.h"
 #include "td/db/binlog/detail/BinlogEventsBuffer.h"
 #include "td/db/binlog/detail/BinlogEventsProcessor.h"
 
@@ -422,6 +423,7 @@ void Binlog::flush(const char *source) {
   if (state_ == State::Load) {
     return;
   }
+  TdMetrics::binlog_flush_count.fetch_add(1, std::memory_order_relaxed);
   LOG(DEBUG) << "Flush binlog from " << source;
   flush_events_buffer(true);
   // NB: encryption happens during flush

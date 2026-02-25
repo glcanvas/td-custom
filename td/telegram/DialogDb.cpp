@@ -11,6 +11,7 @@
 #include "td/db/SqliteConnectionSafe.h"
 #include "td/db/SqliteDb.h"
 #include "td/db/SqliteStatement.h"
+#include "td/db/TdMetrics.h"
 
 #include "td/actor/actor.h"
 #include "td/actor/SchedulerLocalStorage.h"
@@ -463,6 +464,9 @@ class DialogDbAsync final : public DialogDbAsyncInterface {
       if (pending_writes_.empty()) {
         return;
       }
+      TdMetrics::dlg_db_flush_count.fetch_add(1, std::memory_order_relaxed);
+      TdMetrics::dlg_db_pending_writes.store(static_cast<int64_t>(pending_writes_.size()),
+                                             std::memory_order_relaxed);
       sync_db_->begin_write_transaction().ensure();
       set_promises(pending_writes_);
       sync_db_->commit_transaction().ensure();

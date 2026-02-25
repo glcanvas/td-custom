@@ -6,6 +6,7 @@
 //
 #include "td/telegram/Client.h"
 
+#include "td/db/TdMetrics.h"
 #include "td/telegram/Td.h"
 #include "td/telegram/TdCallback.h"
 
@@ -303,9 +304,11 @@ class TdReceiver {
           : client_id_(client_id), output_queue_(std::move(output_queue)) {
       }
       void on_result(uint64 id, td_api::object_ptr<td_api::Object> result) final {
+        TdMetrics::output_events_produced.fetch_add(1, std::memory_order_relaxed);
         output_queue_->writer_put({client_id_, id, std::move(result)});
       }
       void on_error(uint64 id, td_api::object_ptr<td_api::error> error) final {
+        TdMetrics::output_events_produced.fetch_add(1, std::memory_order_relaxed);
         output_queue_->writer_put({client_id_, id, std::move(error)});
       }
       Callback(const Callback &) = delete;
@@ -339,6 +342,7 @@ class TdReceiver {
     }
     if (output_queue_ready_cnt_ > 0) {
       output_queue_ready_cnt_--;
+      TdMetrics::output_events_consumed.fetch_add(1, std::memory_order_relaxed);
       return output_queue_->reader_get_unsafe();
     }
     if (timeout != 0) {

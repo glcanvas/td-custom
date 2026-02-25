@@ -87,6 +87,7 @@
 #include "td/telegram/Td.h"
 #include "td/telegram/td_api.h"
 #include "td/telegram/TdDb.h"
+#include "td/db/TdMetrics.h"
 #include "td/telegram/telegram_api.h"
 #include "td/telegram/telegram_api.hpp"
 #include "td/telegram/ThemeManager.h"
@@ -499,7 +500,9 @@ void UpdatesManager::run_get_difference(bool is_recursive, const char *source) {
   CHECK(td_->auth_manager_->is_authorized());
   CHECK(!running_get_difference_);
 
+  TdMetrics::get_difference_total.fetch_add(1, std::memory_order_relaxed);
   running_get_difference_ = true;
+  TdMetrics::running_get_difference.store(1, std::memory_order_relaxed);
 
   int32 pts = get_pts();
   int32 date = get_date();
@@ -542,6 +545,8 @@ void UpdatesManager::before_get_difference(bool is_initial) {
       postponed_pts_updates_.emplace(std::move(update.update), update.pts, update.pts_count, update.receive_time,
                                      std::move(update.promise));
     }
+    TdMetrics::postponed_pts_updates_count.store(static_cast<int64_t>(postponed_pts_updates_.size()),
+                                                 std::memory_order_relaxed);
   } else {
     for (auto &update : pending_pts_updates_) {
       promises.push_back(std::move(update.promise));
@@ -1316,6 +1321,7 @@ void UpdatesManager::on_failed_get_updates_state(Status &&error) {
   }
 
   running_get_difference_ = false;
+  TdMetrics::running_get_difference.store(0, std::memory_order_relaxed);
   schedule_get_difference("on_failed_get_updates_state");
 }
 
@@ -1328,6 +1334,7 @@ void UpdatesManager::on_failed_get_difference(Status &&error) {
   }
 
   running_get_difference_ = false;
+  TdMetrics::running_get_difference.store(0, std::memory_order_relaxed);
   schedule_get_difference("on_failed_get_difference");
 
   if (error.message() == Slice("PERSISTENT_TIMESTAMP_INVALID")) {
@@ -1383,6 +1390,7 @@ void UpdatesManager::on_get_updates_state(tl_object_ptr<telegram_api::updates_st
 
   if (running_get_difference_) {  // called from getUpdatesState
     running_get_difference_ = false;
+    TdMetrics::running_get_difference.store(0, std::memory_order_relaxed);
     after_get_difference();
   }
 }
@@ -1881,6 +1889,7 @@ void UpdatesManager::init_state() {
   if (pts_str.empty()) {
     if (!running_get_difference_) {
       running_get_difference_ = true;
+      TdMetrics::running_get_difference.store(1, std::memory_order_relaxed);
 
       before_get_difference(true);
 
@@ -2058,6 +2067,7 @@ void UpdatesManager::on_get_difference(tl_object_ptr<telegram_api::updates_Diffe
 
   VLOG(get_difference) << "----- END  GET DIFFERENCE-----";
   running_get_difference_ = false;
+  TdMetrics::running_get_difference.store(0, std::memory_order_relaxed);
 
   LOG(DEBUG) << "Result of get difference: " << to_string(difference_ptr);
 
@@ -3164,6 +3174,8 @@ void UpdatesManager::add_pending_pts_update(tl_object_ptr<telegram_api::Update> 
   }
 
   pending_pts_updates_.emplace(std::move(update), new_pts, pts_count, receive_time, std::move(promise));
+  TdMetrics::pending_pts_updates_count.store(static_cast<int64_t>(pending_pts_updates_.size()),
+                                             std::memory_order_relaxed);
 
   if (old_pts < accumulated_pts_ - accumulated_pts_count_) {
     if (old_pts == new_pts - pts_count) {
@@ -3192,6 +3204,8 @@ void UpdatesManager::postpone_pts_update(tl_object_ptr<telegram_api::Update> &&u
     return promise.set_value(Unit());
   }
   postponed_pts_updates_.emplace(std::move(update), pts, pts_count, receive_time, std::move(promise));
+  TdMetrics::postponed_pts_updates_count.store(static_cast<int64_t>(postponed_pts_updates_.size()),
+                                               std::memory_order_relaxed);
 }
 
 void UpdatesManager::process_seq_updates(int32 seq_end, int32 date,
@@ -3464,6 +3478,7 @@ void UpdatesManager::drop_all_pending_pts_updates() {
 }
 
 void UpdatesManager::process_postponed_pts_updates() {
+  TdMetrics::process_postponed_calls.fetch_add(1, std::memory_order_relaxed);
   if (postponed_pts_updates_.empty()) {
     return;
   }
@@ -3546,9 +3561,12 @@ void UpdatesManager::process_postponed_pts_updates() {
                  << postponed_pts_updates_.size() << " postponed for " << (Time::now() - get_difference_start_time_)
                  << " seconds updates in " << passed_time << " seconds";
   }
+  TdMetrics::postponed_pts_updates_count.store(static_cast<int64_t>(postponed_pts_updates_.size()),
+                                               std::memory_order_relaxed);
 }
 
 void UpdatesManager::process_pending_pts_updates() {
+  TdMetrics::process_pending_calls.fetch_add(1, std::memory_order_relaxed);
   if (pending_pts_updates_.empty()) {
     return;
   }
@@ -3604,6 +3622,8 @@ void UpdatesManager::process_pending_pts_updates() {
                  << applied_update_count << " and keeping " << pending_pts_updates_.size() << " pending updates in "
                  << passed_time << " seconds";
   }
+  TdMetrics::pending_pts_updates_count.store(static_cast<int64_t>(pending_pts_updates_.size()),
+                                             std::memory_order_relaxed);
 }
 
 void UpdatesManager::process_pending_seq_updates() {

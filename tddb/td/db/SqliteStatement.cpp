@@ -6,10 +6,12 @@
 //
 #include "td/db/SqliteStatement.h"
 
+#include "td/db/TdMetrics.h"
 #include "td/utils/format.h"
 #include "td/utils/logging.h"
 #include "td/utils/StackAllocator.h"
 #include "td/utils/StringBuilder.h"
+#include "td/utils/Time.h"
 
 #include "sqlite/sqlite3.h"
 
@@ -180,7 +182,12 @@ Status SqliteStatement::step() {
   }
   VLOG(sqlite) << "Start step " << tag("query", tdsqlite3_sql(stmt_.get())) << tag("statement", stmt_.get())
                << tag("database", db_.get());
+  auto t0 = Time::now();
   auto rc = tdsqlite3_step(stmt_.get());
+  auto elapsed_us = static_cast<int64_t>((Time::now() - t0) * 1e6);
+  TdMetrics::sqlite_step_count.fetch_add(1, std::memory_order_relaxed);
+  TdMetrics::sqlite_step_total_us.fetch_add(elapsed_us, std::memory_order_relaxed);
+  TdMetrics::record_query(tdsqlite3_sql(stmt_.get()), elapsed_us);
   VLOG(sqlite) << "Finish step with response " << (rc == SQLITE_ROW ? "ROW" : (rc == SQLITE_DONE ? "DONE" : "ERROR"));
   if (rc == SQLITE_ROW) {
     state_ = State::HaveRow;

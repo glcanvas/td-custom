@@ -6,6 +6,7 @@
 //
 #include "td/db/SqliteDb.h"
 
+#include "td/db/TdMetrics.h"
 #include "td/utils/common.h"
 #include "td/utils/format.h"
 #include "td/utils/logging.h"
@@ -14,6 +15,7 @@
 #include "td/utils/SliceBuilder.h"
 #include "td/utils/Status.h"
 #include "td/utils/StringBuilder.h"
+#include "td/utils/Time.h"
 #include "td/utils/Timer.h"
 
 #include "sqlite/sqlite3.h"
@@ -124,7 +126,12 @@ Status SqliteDb::exec(CSlice cmd) {
   if (enable_logging_) {
     VLOG(sqlite) << "Start exec " << tag("query", cmd) << tag("database", raw_->db());
   }
+  auto t0 = Time::now();
   auto rc = tdsqlite3_exec(raw_->db(), cmd.c_str(), nullptr, nullptr, &msg);
+  auto elapsed_us = static_cast<int64_t>((Time::now() - t0) * 1e6);
+  TdMetrics::sqlite_exec_count.fetch_add(1, std::memory_order_relaxed);
+  TdMetrics::sqlite_exec_total_us.fetch_add(elapsed_us, std::memory_order_relaxed);
+  TdMetrics::record_query(cmd.c_str(), elapsed_us);
   if (rc != SQLITE_OK) {
     CHECK(msg != nullptr);
     if (enable_logging_) {
@@ -190,6 +197,7 @@ Status SqliteDb::begin_read_transaction() {
 
 Status SqliteDb::begin_write_transaction() {
   if (raw_->on_begin()) {
+    TdMetrics::sqlite_write_tx_count.fetch_add(1, std::memory_order_relaxed);
     return exec("BEGIN IMMEDIATE");
   }
   return Status::OK();

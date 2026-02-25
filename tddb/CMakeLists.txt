@@ -22,6 +22,7 @@ set(TDDB_SOURCE
   td/db/SqliteKeyValue.cpp
   td/db/SqliteKeyValueAsync.cpp
   td/db/SqliteStatement.cpp
+  td/db/TdMetrics.cpp
   td/db/TQueue.cpp
 
   td/db/binlog/Binlog.h
@@ -42,6 +43,7 @@ set(TDDB_SOURCE
   td/db/SqliteKeyValueAsync.h
   td/db/SqliteKeyValueSafe.h
   td/db/SqliteStatement.h
+  td/db/TdMetrics.h
   td/db/TQueue.h
   td/db/TsSeqKeyValue.h
 

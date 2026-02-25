@@ -11,6 +11,7 @@
 #include <td/telegram/td_api.h>
 #endif
 
+#include <td/db/TdMetrics.h>
 #include <td/tl/tl_jni_object.h>
 
 #include <cstdint>
@@ -111,6 +112,55 @@ static jstring Object_toString(JNIEnv *env, jobject object) {
 
 static jstring Function_toString(JNIEnv *env, jobject object) {
   return td::jni::to_jstring(env, to_string(td::td_api::Function::fetch(env, object)));
+}
+
+static jlongArray Client_nativeGetStats(JNIEnv *env, jclass clazz) {
+  constexpr int N = 26;
+  jlong buf[N] = {
+      td::TdMetrics::pending_pts_updates_count.load(std::memory_order_relaxed),
+      td::TdMetrics::postponed_pts_updates_count.load(std::memory_order_relaxed),
+      td::TdMetrics::running_get_difference.load(std::memory_order_relaxed),
+      td::TdMetrics::get_difference_total.load(std::memory_order_relaxed),
+      td::TdMetrics::output_events_produced.load(std::memory_order_relaxed),
+      td::TdMetrics::output_events_consumed.load(std::memory_order_relaxed),
+      td::TdMetrics::process_pending_calls.load(std::memory_order_relaxed),
+      td::TdMetrics::process_postponed_calls.load(std::memory_order_relaxed),
+      td::TdMetrics::sqlite_step_count.load(std::memory_order_relaxed),
+      td::TdMetrics::sqlite_step_total_us.load(std::memory_order_relaxed),
+      td::TdMetrics::sqlite_exec_count.load(std::memory_order_relaxed),
+      td::TdMetrics::sqlite_exec_total_us.load(std::memory_order_relaxed),
+      td::TdMetrics::sqlite_write_tx_count.load(std::memory_order_relaxed),
+      td::TdMetrics::msg_db_flush_count.load(std::memory_order_relaxed),
+      td::TdMetrics::msg_db_pending_writes.load(std::memory_order_relaxed),
+      td::TdMetrics::dlg_db_flush_count.load(std::memory_order_relaxed),
+      td::TdMetrics::dlg_db_pending_writes.load(std::memory_order_relaxed),
+      td::TdMetrics::binlog_flush_count.load(std::memory_order_relaxed),
+      td::TdMetrics::flood_wait_count.load(std::memory_order_relaxed),
+      td::TdMetrics::flood_wait_total_seconds.load(std::memory_order_relaxed),
+      td::TdMetrics::flood_wait_max_seconds.load(std::memory_order_relaxed),
+      td::TdMetrics::slowmode_wait_count.load(std::memory_order_relaxed),
+      td::TdMetrics::slowmode_wait_total_seconds.load(std::memory_order_relaxed),
+      td::TdMetrics::flood_wait_timeout_exceeded.load(std::memory_order_relaxed),
+      td::TdMetrics::send_message_success.load(std::memory_order_relaxed),
+      td::TdMetrics::send_message_failed.load(std::memory_order_relaxed),
+  };
+  jlongArray result = env->NewLongArray(N);
+  env->SetLongArrayRegion(result, 0, N, buf);
+  return result;
+}
+
+static jobjectArray Client_nativeGetQueryStats(JNIEnv *env, jclass clazz) {
+  auto entries = td::TdMetrics::snapshot_query_stats();
+
+  jclass string_class = env->FindClass("java/lang/String");
+  jobjectArray result = env->NewObjectArray(static_cast<jsize>(entries.size()), string_class, nullptr);
+
+  for (jsize i = 0; i < static_cast<jsize>(entries.size()); i++) {
+    auto &e = entries[i];
+    std::string line = e.sql + "\t" + std::to_string(e.count) + "\t" + std::to_string(e.total_us);
+    env->SetObjectArrayElement(result, i, td::jni::to_jstring(env, line));
+  }
+  return result;
 }
 #endif
 
@@ -219,6 +269,8 @@ static jint register_native(JavaVM *vm) {
   register_method(client_class, "nativeClientExecute", "(" TD_FUNCTION ")" TD_OBJECT, Client_nativeClientExecute);
   register_method(client_class, "nativeClientSetLogMessageHandler", "(IL" PACKAGE_NAME "/Client$LogMessageHandler;)V",
                   Client_nativeClientSetLogMessageHandler);
+  register_method(client_class, "nativeGetStats", "()[J", Client_nativeGetStats);
+  register_method(client_class, "nativeGetQueryStats", "()[Ljava/lang/String;", Client_nativeGetQueryStats);
 
   register_method(object_class, "toString", "()Ljava/lang/String;", Object_toString);
 

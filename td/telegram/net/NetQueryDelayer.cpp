@@ -9,6 +9,7 @@
 #include "td/telegram/Global.h"
 #include "td/telegram/net/NetQueryDispatcher.h"
 
+#include "td/db/TdMetrics.h"
 #include "td/utils/common.h"
 #include "td/utils/format.h"
 #include "td/utils/logging.h"
@@ -45,7 +46,19 @@ void NetQueryDelayer::delay(NetQueryPtr query) {
         }
 
         timeout = clamp(to_integer<int>(error_message.substr(prefix.size())), 1, 14 * 24 * 60 * 60);
-        if (prefix == "FLOOD_PREMIUM_WAIT_") {
+        if (prefix == "FLOOD_WAIT_") {
+          TdMetrics::flood_wait_count.fetch_add(1, std::memory_order_relaxed);
+          TdMetrics::flood_wait_total_seconds.fetch_add(timeout, std::memory_order_relaxed);
+          auto prev = TdMetrics::flood_wait_max_seconds.load(std::memory_order_relaxed);
+          while (timeout > prev &&
+                 !TdMetrics::flood_wait_max_seconds.compare_exchange_weak(prev, timeout, std::memory_order_relaxed)) {
+          }
+          LOG(WARNING) << "FLOOD_WAIT: " << timeout << "s for " << query;
+        } else if (prefix == "SLOWMODE_WAIT_") {
+          TdMetrics::slowmode_wait_count.fetch_add(1, std::memory_order_relaxed);
+          TdMetrics::slowmode_wait_total_seconds.fetch_add(timeout, std::memory_order_relaxed);
+          LOG(WARNING) << "SLOWMODE_WAIT: " << timeout << "s for " << query;
+        } else if (prefix == "FLOOD_PREMIUM_WAIT_") {
           switch (query->type()) {
             case NetQuery::Type::Common:
               LOG(ERROR) << "Receive " << error_message << " for " << query;
@@ -98,6 +111,7 @@ void NetQueryDelayer::delay(NetQueryPtr query) {
   }
 
   if (query->total_timeout_ > query->total_timeout_limit_) {
+    TdMetrics::flood_wait_timeout_exceeded.fetch_add(1, std::memory_order_relaxed);
     // TODO: support timeouts in DcAuth and GetConfig
     LOG(WARNING) << "Failed: " << query << " " << tag("timeout", timeout) << tag("total_timeout", query->total_timeout_)
                  << " because of " << error << " from " << query->source_;

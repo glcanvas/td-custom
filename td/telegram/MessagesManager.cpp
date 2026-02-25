@@ -45,6 +45,7 @@
 #include "td/telegram/files/FileType.h"
 #include "td/telegram/ForumTopicManager.h"
 #include "td/telegram/Global.h"
+#include "td/db/TdMetrics.h"
 #include "td/telegram/GroupCallManager.h"
 #include "td/telegram/InlineMessageContent.h"
 #include "td/telegram/InlineQueriesManager.h"
@@ -8766,6 +8767,8 @@ void MessagesManager::delete_dialog_history(DialogId dialog_id, bool remove_from
     promise.set_value(Unit());
     return;
   }
+
+  // todo: fix me, delete_all_dialog_messages
 
   set_dialog_max_unavailable_message_id(dialog_id, last_new_message_id, false, "delete_dialog_history");
   promise.set_value(Unit());
@@ -27020,6 +27023,7 @@ void MessagesManager::send_update_message_send_succeeded(Dialog *d, MessageId ol
       !d->had_yet_unsent_message_id_overflow && m->message_id != MessageId(ServerMessageId(1))) {
     LOG(ERROR) << "Sent " << old_message_id << " to " << d->dialog_id << " as " << m->message_id;
   }
+  TdMetrics::send_message_success.fetch_add(1, std::memory_order_relaxed);
   send_closure(G()->td(), &Td::send_update,
                td_api::make_object<td_api::updateMessageSendSucceeded>(
                    get_message_object(d->dialog_id, m, "send_update_message_send_succeeded"), old_message_id.get()));
@@ -28109,7 +28113,7 @@ bool MessagesManager::process_send_message_fail_error(int32 &error_code, string 
   switch (error_code) {
     case 420:
       error_code = 429;
-      LOG(ERROR) << "Receive error 420: " << error_message;
+      LOG(ERROR) << "Receive error 420: " << error_message << " in " << dialog_id;
       break;
     case 429:
       if (!begins_with(error_message, "Too Many Requests: retry after ")) {
@@ -28405,6 +28409,10 @@ void MessagesManager::fail_send_message(MessageFullId message_full_id, int32 err
   register_new_local_message_id(d, m);
 
   LOG(INFO) << "Send updateMessageSendFailed for " << message_full_id;
+  if (error_code == 429) {
+    LOG(WARNING) << "Message send FAILED (flood) in " << dialog_id << ": " << error_code << " " << error_message;
+  }
+  TdMetrics::send_message_failed.fetch_add(1, std::memory_order_relaxed);
   if (!td_->auth_manager_->is_bot()) {
     yet_unsent_message_full_id_to_persistent_message_id_.emplace({dialog_id, old_message_id}, m->message_id);
   }

@@ -256,4 +256,16 @@ public final class Client {
     private static native TdApi.Object nativeClientExecute(TdApi.Function function);
 
     private static native void nativeClientSetLogMessageHandler(int maxVerbosityLevel, LogMessageHandler logMessageHandler);
+
+    /**
+     * Returns TDLib internal metrics as a long array.
+     * See TdMetrics.h for index mapping.
+     */
+    public static native long[] nativeGetStats();
+
+    /**
+     * Returns per-query SQLite stats as a String array.
+     * Each entry is "sql_text\tcount\ttotal_us".
+     */
+    public static native String[] nativeGetQueryStats();
 }
