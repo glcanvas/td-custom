@@ -21193,11 +21193,10 @@ MessageInputReplyTo MessagesManager::create_message_input_reply_to(
         m = nullptr;
       }
       if (m == nullptr) {
-        if (message_id.is_server() && d->dialog_id.get_type() != DialogType::SecretChat &&
-            d->last_new_message_id.is_valid() && message_id > d->last_new_message_id &&
-            (d->notification_info != nullptr &&
-             message_id <= d->notification_info->max_push_notification_message_id_)) {
-          // allow to reply to yet unreceived server message in the same chat
+        if (message_id.is_server() && d->dialog_id.get_type() != DialogType::SecretChat) {
+          // Local history is wiped on a timer, so a server message can be missing here.
+          // Send the reply anyway; the server returns REPLY_MESSAGE_ID_INVALID if it is gone.
+          LOG(INFO) << "Can't find " << message_id << " in " << d->dialog_id << ", sending reply to server anyway";
           return MessageInputReplyTo{message_id,
                                      {},
                                      DialogId(),
